@@ -66,6 +66,7 @@ func main() {
 
 	for n := 0; n < paymentCount && balance > 0.0; n++ {
 		monthInterest := getInterest(balance, monthlyInterest, n+1)
+		monthlyPayment = math.Min(monthlyPayment, balance+monthInterest)
 		monthPrincipal := monthlyPayment - monthInterest
 		balance = balance - monthPrincipal
 		month := startDate.AddDate(0, n, 0)

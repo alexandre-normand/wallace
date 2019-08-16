@@ -28,5 +28,5 @@ go get github.com/gomarkdown/mdtohtml
 
 To combine `wallace` with `mdt` and `gomarkdown`:
 ```
-wallace --loanAmount=125000 --startDate="September 2019" --years=10 --interest 5 --verbose ./lumpSums.csv  | mdt | mdtohtml -page > out.html
+wallace --loanAmount=125000 --startDate="September 2019" --years=10 --interest 5 --verbose ./lumpSums.csv  | mdt | mdtohtml -css ./github-markdown.css -page > out.html
 ```
