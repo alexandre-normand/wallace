@@ -1,7 +1,7 @@
 # Wallace
 
 
-# Combine it with other tools for nicer output
+# For maximum control, combine it with other tools for nicer output
 
 ## To get markdown output: 
 `Csv` is readable but `markdown` is better. Use [mdt](https://github.com/monochromegane/mdt) 
