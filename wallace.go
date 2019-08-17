@@ -21,6 +21,7 @@ var (
 	projectedEndBalance = kingpin.Flag("endBalance", "Projected end balance at the end of the term").Default("0.").Float()
 	interest            = kingpin.Flag("interest", "Interest rate (i.e. 5 for 5%%)").Required().Float()
 	years               = kingpin.Flag("years", "The term in number of years").Required().Int()
+	output              = kingpin.Flag("output", "The output format").Default("csv").Enum("csv", "markdown", "html")
 )
 
 const (
@@ -36,9 +37,6 @@ type PaymentTime struct {
 func main() {
 	kingpin.Version(version)
 	kingpin.Parse()
-
-	w := csv.NewWriter(os.Stdout)
-	defer w.Flush()
 
 	monthlyInterest := *interest / 100.0 / 12.0
 	verboseWriter := ioutil.Discard
@@ -62,6 +60,9 @@ func main() {
 	}
 
 	balance := *loanAmount
+
+	w := csv.NewWriter(os.Stdout)
+	defer w.Flush()
 	w.Write([]string{"month", "interest", "principal", "balance"})
 
 	for n := 0; n < paymentCount && balance > 0.0; n++ {
@@ -75,7 +76,7 @@ func main() {
 
 		if payment, ok := lumpSums[PaymentTime{month: month.Month(), year: month.Year()}]; ok {
 			balance = balance - payment
-			w.Write([]string{fmt.Sprintf("%s", month.Format(paymentTimeFormat)), fmt.Sprintf("%.2f", 0.0), fmt.Sprintf("%.2f", payment), fmt.Sprintf("%.2f", balance)})
+			w.Write([]string{fmt.Sprintf("%s", month.Format(paymentTimeFormat)), "none", fmt.Sprintf("%.2f", payment), fmt.Sprintf("%.2f", balance)})
 		}
 	}
 }
