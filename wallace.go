@@ -79,7 +79,7 @@ func main() {
 
 	var csvBuilder strings.Builder
 	w := csv.NewWriter(&csvBuilder)
-	w.Write([]string{"month", "interest", "principal", "balance"})
+	w.Write([]string{"month", "interest", "principal", "payment", "balance"})
 
 	for n := 0; n < paymentCount && balance.Cmp(bigZero) > 0; n++ {
 		monthInterest := getInterest(*balance, *monthlyInterest, n+1)
@@ -88,11 +88,11 @@ func main() {
 		balance = balance.Sub(balance, monthPrincipal)
 		month := startDate.AddDate(0, n, 0)
 
-		w.Write([]string{fmt.Sprintf("%s", month.Format(paymentTimeFormat)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&monthInterest)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(monthPrincipal)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(balance))})
+		w.Write([]string{fmt.Sprintf("%s", month.Format(paymentTimeFormat)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&monthInterest)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(monthPrincipal)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&monthlyPayment)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(balance))})
 
 		if payment, ok := lumpSums[PaymentTime{month: month.Month(), year: month.Year()}]; ok {
 			balance = balance.Sub(balance, &payment)
-			w.Write([]string{fmt.Sprintf("%s", month.Format(paymentTimeFormat)), "none", fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&payment)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(balance))})
+			w.Write([]string{fmt.Sprintf("%s", month.Format(paymentTimeFormat)), "none", fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&payment)), "none", fmt.Sprintf("%s", currency.FormatMoneyBigFloat(balance))})
 		}
 	}
 	w.Flush()

@@ -15,6 +15,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.1
 	github.com/pkg/errors v0.8.1
 	github.com/stretchr/testify v1.4.0 // indirect
+	golang.org/x/text v0.3.2 // indirect
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 )
