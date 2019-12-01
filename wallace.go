@@ -39,9 +39,17 @@ const (
 var currency = accounting.Accounting{Symbol: "$", Thousand: ",", Precision: 2}
 var bigZero = big.NewFloat(0.0)
 
-type PaymentTime struct {
-	month time.Month
+// PaymentPeriod holds the start date of a payment period
+type PaymentPeriod struct {
 	year  int
+	month time.Month
+	day   int
+}
+
+type LumpSumPayment struct {
+	PaymentPeriod
+	paymentDate time.Time
+	amount      big.Float
 }
 
 func main() {
@@ -70,7 +78,7 @@ func main() {
 	verboseLog.Printf("Output mode: %s", *output)
 	verboseLog.Printf("Number of payments is %d, monthly interest rate is %f%% and monthly payment is %s", paymentCount, monthlyInterest, currency.FormatMoneyBigFloat(&monthlyPayment))
 
-	lumpSums, err := getLumpSums(verboseLog, *lumpSums)
+	lumpSums, err := getLumpSums(verboseLog, *lumpSums, startDate)
 	if err != nil {
 		log.Fatalf("Error reading lump sum files: %s", err.Error())
 	}
@@ -86,13 +94,18 @@ func main() {
 		monthlyPayment = bigFloatMin(monthlyPayment, *big.NewFloat(0.0).Add(balance, &monthInterest))
 		monthPrincipal := big.NewFloat(0.0).Sub(&monthlyPayment, &monthInterest)
 		balance = balance.Sub(balance, monthPrincipal)
-		month := startDate.AddDate(0, n, 0)
+		periodDate := startDate.AddDate(0, n, 0)
 
-		w.Write([]string{fmt.Sprintf("%s", month.Format(paymentTimeFormat)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&monthInterest)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(monthPrincipal)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&monthlyPayment)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(balance))})
+		w.Write([]string{fmt.Sprintf("%s", periodDate.Format(paymentTimeFormat)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&monthInterest)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(monthPrincipal)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&monthlyPayment)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(balance))})
 
-		if payment, ok := lumpSums[PaymentTime{month: month.Month(), year: month.Year()}]; ok {
-			balance = balance.Sub(balance, &payment)
-			w.Write([]string{fmt.Sprintf("%s", month.Format(paymentTimeFormat)), "none", fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&payment)), "none", fmt.Sprintf("%s", currency.FormatMoneyBigFloat(balance))})
+		if payment, ok := lumpSums[PaymentPeriod{month: periodDate.Month(), year: periodDate.Year(), day: periodDate.Day()}]; ok {
+			daysSinceLastPayment := int(payment.paymentDate.Sub(periodDate).Hours()) / 24
+			if daysSinceLastPayment > 0 {
+				log.Fatalf("Lump sum payments are only supported when made on the same date as the montly loan payments but had a payment on day [%s] with loan payment date of [%s]\n", payment.paymentDate.Format(paymentTimeFormat), periodDate.Format(paymentTimeFormat))
+			}
+
+			balance = balance.Sub(balance, &payment.amount)
+			w.Write([]string{fmt.Sprintf("%s", payment.paymentDate.Format(paymentTimeFormat)), "none", fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&payment.amount)), "none", fmt.Sprintf("%s", currency.FormatMoneyBigFloat(balance))})
 		}
 	}
 	w.Flush()
@@ -151,8 +164,8 @@ func bigFloatMin(a big.Float, b big.Float) (min big.Float) {
 	}
 }
 
-func getLumpSums(verboseLog *log.Logger, lumpSumsFile *os.File) (lumpSums map[PaymentTime]big.Float, err error) {
-	lumpSums = make(map[PaymentTime]big.Float)
+func getLumpSums(verboseLog *log.Logger, lumpSumsFile *os.File, startDate time.Time) (lumpSums map[PaymentPeriod]LumpSumPayment, err error) {
+	lumpSums = make(map[PaymentPeriod]LumpSumPayment)
 
 	r := csv.NewReader(lumpSumsFile)
 
@@ -166,13 +179,13 @@ func getLumpSums(verboseLog *log.Logger, lumpSumsFile *os.File) (lumpSums map[Pa
 			return nil, fmt.Errorf("Incorrect format, should be: paymentTime,paymentValue but was %v", record)
 		}
 
-		time, err := getMonthYearDate(record[0])
+		paymentDate, err := getMonthYearDate(record[0])
 		if err != nil {
 			if line == 0 {
 				verboseLog.Printf("Skipping what looks like a header row: %v", record)
 				continue
 			} else {
-				return nil, errors.Wrapf(err, "Error reading payment time at line %d, should be in format month yyyy (i.e. January 2006)", line)
+				return nil, errors.Wrapf(err, "Error reading payment time at line %d, should be in format %s", line, paymentTimeFormat)
 			}
 		}
 
@@ -186,14 +199,25 @@ func getLumpSums(verboseLog *log.Logger, lumpSumsFile *os.File) (lumpSums map[Pa
 			}
 		}
 
-		lumpSums[PaymentTime{month: time.Month(), year: time.Year()}] = *payment
+		pp := PaymentPeriod{month: paymentDate.Month(), year: paymentDate.Year(), day: startDate.Day()}
+		if paymentDate.Day() < startDate.Day() {
+			paymentMonth := paymentDate.AddDate(0, -1, 0)
+			paymentDay := time.Date(paymentMonth.Year(), paymentMonth.Month(), startDate.Day(), 0, 0, 0, 0, time.UTC)
+			pp = PaymentPeriod{month: paymentDay.Month(), year: paymentDay.Year(), day: paymentDay.Day()}
+		}
+
+		if _, ok := lumpSums[pp]; ok {
+			return nil, fmt.Errorf("Only one lump sum per period supported but got multiple for period [%v]", pp)
+		}
+
+		lumpSums[pp] = LumpSumPayment{PaymentPeriod: pp, paymentDate: paymentDate, amount: *payment}
 	}
 
 	return lumpSums, nil
 }
 
 func getMonthYearDate(val string) (startDate time.Time, err error) {
-	return time.Parse(paymentTimeFormat, val)
+	return time.ParseInLocation(paymentTimeFormat, val, time.UTC)
 }
 
 func getInterest(principal big.Float, monthlyRate big.Float, n int) (interest big.Float) {
