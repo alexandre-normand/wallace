@@ -88,19 +88,32 @@ func main() {
 	w := csv.NewWriter(&csvBuilder)
 	w.Write([]string{"month", "interest", "principal", "payment", "balance"})
 
-	for n := 0; n < paymentCount && balance.Cmp(bigZero) > 0; n++ {
-		monthInterest := getInterest(*balance, *monthlyInterest, n+1)
-		monthlyPayment = bigFloatMin(monthlyPayment, *big.NewFloat(0.0).Add(balance, &monthInterest))
-		monthPrincipal := big.NewFloat(0.0).Sub(&monthlyPayment, &monthInterest)
+	for n := 0; n <= paymentCount && balance.Cmp(bigZero) > 0; n++ {
+		monthInterest := big.NewFloat(0.0)
+		monthPrincipal := big.NewFloat(0.0)
+		monthPayment := *big.NewFloat(0.0)
+		if n > 0 {
+			i := getInterest(*balance, *monthlyInterest, n+1)
+			monthInterest = truncateToTwoDecimals(&i)
+			monthPrincipal = truncateToTwoDecimals(big.NewFloat(0.0).Sub(&monthlyPayment, monthInterest))
+			monthPayment = bigFloatMin(monthlyPayment, *big.NewFloat(0.0).Add(balance, monthInterest))
+		}
+
 		balance = truncateToTwoDecimals(balance.Sub(balance, monthPrincipal))
+	
+		if balance.Cmp(bigZero) < 0 {
+			// Follow standard practice and adjust last payment if needed (because of rounding)
+			monthPayment = *big.NewFloat(0.0).Add(&monthlyPayment, balance)
+			balance = big.NewFloat(0.0)
+		}
 		periodDate := startDate.AddDate(0, n, 0)
 
-		w.Write([]string{fmt.Sprintf("%s", periodDate.Format(paymentTimeFormat)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&monthInterest)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(monthPrincipal)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&monthlyPayment)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(balance))})
+		w.Write([]string{fmt.Sprintf("%s", periodDate.Format(paymentTimeFormat)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(monthInterest)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(monthPrincipal)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&monthPayment)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(balance))})
 
 		if payment, ok := lumpSums[PaymentPeriod{month: periodDate.Month(), year: periodDate.Year(), day: periodDate.Day()}]; ok {
 			daysSinceLastPayment := int(payment.paymentDate.Sub(periodDate).Hours()) / 24
 			if daysSinceLastPayment > 0 {
-				log.Fatalf("Lump sum payments are only supported when made on the same date as the montly loan payments but had a payment on day [%s] with loan payment date of [%s]\n", payment.paymentDate.Format(paymentTimeFormat), periodDate.Format(paymentTimeFormat))
+				log.Fatalf("lump sum payments are only supported when made on the same date as the montly loan payments but had a payment on day [%s] with loan payment date of [%s]\n", payment.paymentDate.Format(paymentTimeFormat), periodDate.Format(paymentTimeFormat))
 			}
 
 			balance = balance.Sub(balance, &payment.amount)
