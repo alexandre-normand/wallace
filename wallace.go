@@ -12,6 +12,7 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 	"io/ioutil"
 	"log"
+	"math"
 	"math/big"
 	"os"
 	"strings"
@@ -19,15 +20,13 @@ import (
 )
 
 var (
-	verbose             = kingpin.Flag("verbose", "Verbose mode.").Short('v').Bool()
-	lumpSums            = kingpin.Arg("lumpSums", "Lump sums file (csv) with format: month-yyyy,amount").Required().File()
-	loanAmount          = kingpin.Flag("loanAmount", "Initial loan amount").Required().Float()
-	startDate           = kingpin.Flag("startDate", "Start date of loan repayment in format (month yyyy such as September 9 2019)").Required().String()
-	projectedEndBalance = kingpin.Flag("endBalance", "Projected end balance at the end of the term").Default("0.").Float()
-	interest            = kingpin.Flag("interest", "Interest rate (i.e. 5 for 5%%)").Required().Float()
-	years               = kingpin.Flag("years", "The term in number of years").Required().Int()
-	compounding         = kingpin.Flag("compounding", "The interest compounding").Default("semiannually").Enum("semiannually")
-	output              = kingpin.Flag("output", "The output format").Default("csv").Enum("csv", "markdown", "html")
+	verbose    = kingpin.Flag("verbose", "Verbose mode.").Short('v').Bool()
+	lumpSums   = kingpin.Arg("lumpSums", "Lump sums file (csv) with format: month d yyyy,amount").Required().File()
+	loanAmount = kingpin.Flag("loanAmount", "Initial loan amount").Required().Float()
+	startDate  = kingpin.Flag("startDate", "Start date of loan repayment in format (month d yyyy such as September 9 2019)").Required().String()
+	interest   = kingpin.Flag("interest", "Interest rate (i.e. 5 for 5%%)").Required().Float()
+	years      = kingpin.Flag("years", "The term in number of years").Required().Int()
+	output     = kingpin.Flag("output", "The output format").Default("csv").Enum("csv", "markdown", "html")
 )
 
 const (
@@ -93,7 +92,7 @@ func main() {
 		monthInterest := getInterest(*balance, *monthlyInterest, n+1)
 		monthlyPayment = bigFloatMin(monthlyPayment, *big.NewFloat(0.0).Add(balance, &monthInterest))
 		monthPrincipal := big.NewFloat(0.0).Sub(&monthlyPayment, &monthInterest)
-		balance = balance.Sub(balance, monthPrincipal)
+		balance = truncateToTwoDecimals(balance.Sub(balance, monthPrincipal))
 		periodDate := startDate.AddDate(0, n, 0)
 
 		w.Write([]string{fmt.Sprintf("%s", periodDate.Format(paymentTimeFormat)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&monthInterest)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(monthPrincipal)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&monthlyPayment)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(balance))})
@@ -135,6 +134,13 @@ func main() {
 
 		fmt.Fprintf(os.Stdout, styledHTML)
 	}
+}
+
+func truncateToTwoDecimals(balance *big.Float) (truncated *big.Float) {
+	balanceAsFloat, _ := balance.Float64()
+	truncatedBalance := float64(math.Round(balanceAsFloat*100.)) / 100.
+	balance = big.NewFloat(truncatedBalance)
+	return balance
 }
 
 func csvToMarkdown(rawCsv string) (mrkdwn string, err error) {
@@ -207,7 +213,7 @@ func getLumpSums(verboseLog *log.Logger, lumpSumsFile *os.File, startDate time.T
 		}
 
 		if _, ok := lumpSums[pp]; ok {
-			return nil, fmt.Errorf("Only one lump sum per period supported but got multiple for period [%v]", pp)
+			return nil, fmt.Errorf("only one lump sum per period supported but got multiple for period [%v]", pp)
 		}
 
 		lumpSums[pp] = LumpSumPayment{PaymentPeriod: pp, paymentDate: paymentDate, amount: *payment}
