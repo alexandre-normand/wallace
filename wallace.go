@@ -92,20 +92,18 @@ func main() {
 		monthInterest := big.NewFloat(0.0)
 		monthPrincipal := big.NewFloat(0.0)
 		monthPayment := *big.NewFloat(0.0)
+		balance = truncateToTwoDecimals(balance.Sub(balance, monthPrincipal))
 		if n > 0 {
 			i := getInterest(*balance, *monthlyInterest, n+1)
 			monthInterest = truncateToTwoDecimals(&i)
-			monthPrincipal = truncateToTwoDecimals(big.NewFloat(0.0).Sub(&monthlyPayment, monthInterest))
-			monthPayment = bigFloatMin(monthlyPayment, *big.NewFloat(0.0).Add(balance, monthInterest))
+			// The month's principal is either the monthly payment minus the interest or the remaining balance if we're
+			// at the last payment
+			actualMonthPrincipal := bigFloatMin(*big.NewFloat(0.0).Sub(&monthlyPayment, monthInterest), *balance)
+			monthPrincipal = truncateToTwoDecimals(&actualMonthPrincipal)
+			balance = truncateToTwoDecimals(balance.Sub(balance, monthPrincipal))
+			monthPayment = bigFloatMin(monthlyPayment, *big.NewFloat(0.0).Add(monthInterest, monthPrincipal))
 		}
 
-		balance = truncateToTwoDecimals(balance.Sub(balance, monthPrincipal))
-	
-		if balance.Cmp(bigZero) < 0 {
-			// Follow standard practice and adjust last payment if needed (because of rounding)
-			monthPayment = *big.NewFloat(0.0).Add(&monthlyPayment, balance)
-			balance = big.NewFloat(0.0)
-		}
 		periodDate := startDate.AddDate(0, n, 0)
 
 		w.Write([]string{fmt.Sprintf("%s", periodDate.Format(paymentTimeFormat)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(monthInterest)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(monthPrincipal)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(&monthPayment)), fmt.Sprintf("%s", currency.FormatMoneyBigFloat(balance))})
