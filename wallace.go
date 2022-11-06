@@ -8,6 +8,7 @@ import (
 	"math"
 	"math/big"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -57,6 +58,12 @@ type LumpSumPayment struct {
 	exchangeRateDate     *time.Time
 	originalPaymentValue *big.Float
 }
+
+type ByPaymentDate []LumpSumPayment
+
+func (a ByPaymentDate) Len() int           { return len(a) }
+func (a ByPaymentDate) Less(i, j int) bool { return a[i].paymentDate.Before(a[j].paymentDate) }
+func (a ByPaymentDate) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
 func main() {
 	kingpin.Version(version)
@@ -141,7 +148,12 @@ func main() {
 	}
 	mrkdwn.WriteString(mrkdwnContent)
 	mrkdwn.WriteString("\n\n## Lump sump payments\n")
+	ls := make([]LumpSumPayment, 0, len(lumpSums))
 	for _, l := range lumpSums {
+		ls = append(ls, l)
+	}
+	sort.Sort(ByPaymentDate(ls))
+	for _, l := range ls {
 		if l.currency == nil {
 			mrkdwn.WriteString(fmt.Sprintf("* Payment of `%s` made on `%s`\n", currency.FormatMoneyBigFloat(&l.amount), l.paymentDate.Format(displayDateFormat)))
 		} else {
